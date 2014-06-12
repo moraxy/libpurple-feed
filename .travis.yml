@@ -7,11 +7,11 @@ compiler:
 
 before_install:
   - sudo apt-get update -qq
-  - sudo apt-get install build-essential make libpurple-dev libmrss0-dev
+  - sudo apt-get install build-essential make libpurple-dev libmrss0-dev pidgin
   - sudo apt-get build-dep libpurple0
 
 script:
-  - sudo make
+  - make
   - sudo make install
 
 notifications:
