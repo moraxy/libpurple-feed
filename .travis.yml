@@ -1,6 +1,5 @@
 language: c
 
-# Makefile is hardcoded to gcc currently
 compiler:
   - gcc
   - clang
@@ -16,4 +15,6 @@ script:
 
 notifications:
   email:
+    recipients:
+      - moraxy@users.noreply.github.com
     on_success: always

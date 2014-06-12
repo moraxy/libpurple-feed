@@ -9,7 +9,6 @@ C_SRCS = feed.c
 
 C_OBJS = $(C_SRCS:.c=.o)
 
-CC = gcc
 LD = $(CC)
 CFLAGS_PURPLE = $(shell pkg-config --cflags purple)
 CFLAGS_MRSS = $(shell pkg-config --cflags mrss)
