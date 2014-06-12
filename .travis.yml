@@ -1,0 +1,19 @@
+language: c
+
+# Makefile is hardcoded to gcc currently
+compiler:
+  - gcc
+  - clang
+
+before_install:
+  - sudo apt-get update -qq
+  - sudo apt-get install build-essential make libpurple-dev libmrss0-dev
+  - sudo apt-get build-dep libpurple0
+
+script:
+  - sudo make
+  - sudo make install
+
+notifications:
+  email:
+    on_success: always
