@@ -1,4 +1,4 @@
-**Currently still in alpha.**
+**Currently still in alpha.** [![Build Status](https://travis-ci.org/moraxy/libpurple-feed.svg?branch=travis_test)](https://travis-ci.org/moraxy/libpurple-feed)
 
 # Building (preliminary)
     $ sudo apt-get install build-essential make libpurple-dev libmrss0-dev
