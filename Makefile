@@ -20,7 +20,7 @@ CFLAGS = \
     -Wextra \
     -fPIC \
     -DPURPLE_PLUGINS \
-    -DPIC -DENABLE_NLS \
+    -DPIC \
     $(CFLAGS_PURPLE) \
     $(CFLAGS_MRSS)
 
