@@ -121,8 +121,10 @@ static const char *prplfeed_list_icon(PurpleAccount *a, PurpleBuddy *b)
 static const char *prplfeed_list_emblems(PurpleBuddy *b)
 {
 	// TODO come up with something?
-	//return "external";
-	return NULL;
+	if(strncmp(b->name, "https", strlen("https")) == 0)
+		return "secure";
+	else
+		return NULL;
 }
 
 static gboolean prplfeed_request_feed_from_buddy(PurpleBuddy *b, mrss_t **mrss, mrss_options_t *options);
