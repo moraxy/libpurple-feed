@@ -130,7 +130,7 @@ static const char *prplfeed_list_emblems(PurpleBuddy *b)
 }
 
 static gboolean prplfeed_request_feed_from_buddy(PurpleBuddy *b, mrss_t **mrss, mrss_options_t *options);
-static gboolean test_timeout(gpointer userdata)
+static gboolean prplfeed_feed_check(gpointer userdata)
 {
 	// TODO too many failed attempts => deactivate buddy?
 
@@ -155,27 +155,48 @@ static gboolean test_timeout(gpointer userdata)
 	return TRUE;
 }
 
-
 static void prplfeed_check_buddy(PurpleConnection *gc, PurpleBuddy *buddy, gpointer userdata)
 {
-	guint *timerID = purple_buddy_get_protocol_data(buddy);
+	int refresh_time;
+	int timer_id;
 
 	purple_debug_info(PRPLFEED, "%s checking %s\n", gc->account->username, buddy->alias ? buddy->alias : buddy->name);
 
-	if (timerID)
-	{
-		purple_debug_info(PRPLFEED, "%s checked before\n", buddy->alias ? buddy->alias : buddy->name);
-	}
-	else
-	{
-		int refreshTime = purple_account_get_int(buddy->account, "refreshtime", DEFAULT_REFRESH_TIME);
+	timer_id = purple_blist_node_get_int(PURPLE_BLIST_NODE(buddy), "timerid");
 
-		purple_debug_info(PRPLFEED, "First time checking %s, setting a %i minutes timer\n", buddy->alias ? buddy->alias : buddy->name, refreshTime);
-		timerID = (guint*)purple_timeout_add_seconds(refreshTime/* TODO don't forget on release: refreshTime*60) */, test_timeout, buddy);
-		purple_buddy_set_protocol_data(buddy, timerID);
+	if (timer_id > 0) /* Active and running */
+	{
+		purple_debug_info(PRPLFEED, "%s is already active\n", buddy->alias ? buddy->alias : buddy->name);
+	}
+	else if (timer_id <= 0)	/* Possibly activated before but still dormant */
+	{
+		refresh_time = purple_blist_node_get_int(PURPLE_BLIST_NODE(buddy), "refreshtime");
+
+		if(refresh_time <= 0) /* Total newbie */
+		{
+			/* First try the group node */
+			refresh_time = purple_blist_node_get_int(PURPLE_BLIST_NODE(purple_buddy_get_group(buddy)), "refreshtime");
+
+			/* No group setting either, just use the default */
+			if(refresh_time <= 0)
+				refresh_time = purple_account_get_int(buddy->account, "refreshtime", DEFAULT_REFRESH_TIME);
+
+			purple_debug_info(PRPLFEED, "First time checking %s, setting a %i minutes timer\n", buddy->alias ? buddy->alias : buddy->name, refresh_time);
+		}
+		else /* Just sleepy */
+		{
+			purple_debug_info(PRPLFEED, "%s was checked before but is inactive, setting a %i minutes timer\n", buddy->alias ? buddy->alias : buddy->name, refresh_time);
+		}
+
+		/* Start timer */
+		timer_id = purple_timeout_add_seconds(refresh_time/* TODO don't forget on release: refreshTime*60) */, prplfeed_feed_check, buddy);
+
+		/* Save for future checks */
+		purple_blist_node_set_int(PURPLE_BLIST_NODE(buddy), "refreshtime", refresh_time);
+		purple_blist_node_set_int(PURPLE_BLIST_NODE(buddy), "timerid", timer_id);
 
 		/* Don't wait for the first interval to finish */
-		test_timeout((gpointer)buddy);
+		prplfeed_feed_check((gpointer)buddy);
 	}
 }
 
