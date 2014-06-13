@@ -37,6 +37,7 @@
 #include "xmlnode.h"
 
 #include <mrss.h>
+#include <curl/curl.h>
 
 /* From internal.h */
 //TODO
@@ -72,48 +73,6 @@
 #define PRPLFEED		"prplfeed"
 
 #define DEFAULT_REFRESH_TIME	30
-
-/* From pidgin-facebookchat */
-static time_t prplfeed_pubdate_to_time_t(const char *pubDate)
-{
-	time_t time_of_message;
-	char month_string[4], weekday[4];
-	guint year, month, day, hour, minute, second;
-	long timezone;
-	char *tmp = NULL;
-
-	month_string[3] = weekday[3] = '\0';
-	year = month = day = hour = minute = second = 0;
-
-	/* RSS times are in Thu, 19 Jun 2008 15:51:25 -1100 format */
-	sscanf(pubDate, "%3s, %2u %3s %4u %2u:%2u:%2u %5ld", (char*)&weekday, &day, (char*)&month_string, &year, &hour, &minute, &second, &timezone);
-	if (g_str_equal(month_string, "Jan")) month = 1;
-	else if (g_str_equal(month_string, "Feb")) month = 2;
-	else if (g_str_equal(month_string, "Mar")) month = 3;
-	else if (g_str_equal(month_string, "Apr")) month = 4;
-	else if (g_str_equal(month_string, "May")) month = 5;
-	else if (g_str_equal(month_string, "Jun")) month = 6;
-	else if (g_str_equal(month_string, "Jul")) month = 7;
-	else if (g_str_equal(month_string, "Aug")) month = 8;
-	else if (g_str_equal(month_string, "Sep")) month = 9;
-	else if (g_str_equal(month_string, "Oct")) month = 10;
-	else if (g_str_equal(month_string, "Nov")) month = 11;
-	else if (g_str_equal(month_string, "Dec")) month = 12;
-
-	/* try using pidgin's functions */
-	tmp = g_strdup_printf("%04u%02u%02uT%02u%02u%02u%05ld", year, month, day, hour, minute, second, timezone);
-	time_of_message = purple_str_to_time(tmp, FALSE, NULL, NULL, NULL);
-	g_free(tmp);
-
-	if (time_of_message <= 0)
-	{
-		/* there's no cross-platform, portable way of converting string to time
-		   which doesn't need a new version of glib, so just cheat */
-		time_of_message = second + 60*minute + 3600*hour + 86400*day + 2592000*month + 31536000*(year-1970);
-	}
-
-	return time_of_message;
-}
 
 static const char *prplfeed_list_icon(PurpleAccount *a, PurpleBuddy *b)
 {
@@ -287,7 +246,7 @@ static void blist_example_menu_item(PurpleBlistNode *node, gpointer userdata)
 		*/
 		purple_conv_im_write(PURPLE_CONV_IM(convo),
 			data->title, item->description, 
-			PURPLE_MESSAGE_RECV, prplfeed_pubdate_to_time_t(item->pubDate));
+			PURPLE_MESSAGE_RECV, curl_getdate(item->pubDate, NULL));
 	}
 
 	if(data)
