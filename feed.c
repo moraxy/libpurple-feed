@@ -71,6 +71,8 @@
 
 #define PRPLFEED		"prplfeed"
 
+#define DEFAULT_REFRESH_TIME	30
+
 /* From pidgin-facebookchat */
 static time_t prplfeed_pubdate_to_time_t(const char *pubDate)
 {
@@ -166,7 +168,7 @@ static void prplfeed_check_buddy(PurpleConnection *gc, PurpleBuddy *buddy, gpoin
 	}
 	else
 	{
-		int refreshTime = purple_account_get_int(buddy->account, "refreshtime", 30);
+		int refreshTime = purple_account_get_int(buddy->account, "refreshtime", DEFAULT_REFRESH_TIME);
 
 		purple_debug_info(PRPLFEED, "First time checking %s, setting a %i minutes timer\n", buddy->alias ? buddy->alias : buddy->name, refreshTime);
 		timerID = (guint*)purple_timeout_add_seconds(refreshTime/* TODO don't forget on release: refreshTime*60) */, test_timeout, buddy);
@@ -509,7 +511,7 @@ static void _init_plugin(PurplePlugin *plugin)
 
 	purple_debug_info(PRPLFEED, "starting up\n");
 
-	option = purple_account_option_int_new(_("Default refresh time (minutes)"), "refreshtime", 30);
+	option = purple_account_option_int_new(_("Default refresh time (minutes)"), "refreshtime", DEFAULT_REFRESH_TIME);
 	prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, option);
 
 #define ADD_VALUE(list, desc, v) { \
