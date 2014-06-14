@@ -184,7 +184,17 @@ static void prplfeed_login(PurpleAccount *acct)
 
 static void prplfeed_close(PurpleConnection *gc)
 {
-	// TODO ?
+	// TODO close and deactivate active timers, connections, URL requests...
+	GSList *buddies;
+
+	purple_debug_info(PRPLFEED, "closing %s\n", gc->account->username);
+
+	for (buddies = purple_find_buddies(gc->account, NULL); buddies; buddies = g_slist_delete_link(buddies, buddies))
+	{
+		PurpleBuddy *buddy = buddies->data;
+
+		purple_blist_node_remove_setting(PURPLE_BLIST_NODE(buddy), "timerid");
+	}
 }
 
 static void prplfeed_add_buddy(PurpleConnection *gc, PurpleBuddy *buddy, PurpleGroup *group)
