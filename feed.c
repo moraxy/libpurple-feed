@@ -526,6 +526,9 @@ static void _init_plugin(PurplePlugin *plugin)
 	option = purple_account_option_bool_new(_("Show status text in buddylist"), "presentation_buddy_status", FALSE);
 	prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, option);
 
+	option = purple_account_option_bool_new(_("Follow Cache-Control and Expires headers"), "obey_cache_headers", TRUE);
+	prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, option);
+
 	option = purple_account_option_string_new("NOTE", "infomsg", "None of this works yet! :(");
 	prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, option);
 }
