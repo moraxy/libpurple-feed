@@ -74,6 +74,75 @@
 
 #define DEFAULT_REFRESH_TIME	30
 
+/* Blame these two for this:
+ * http://stackoverflow.com/questions/4904255/how-can-i-generate-a-list-via-the-c-preprocessor-cpp
+ * http://stackoverflow.com/questions/5106280/string-concatenation-using-preprocessor
+ * This could be awesome for unit tests thou :D
+ */
+// TODO Put as much of this as possible in an header file
+#define PRPLFEED_RETURN_CODES(F) \
+F(200, "OK", dump) \
+F(204, "No Content", dump) \
+F(300, "Multiple Choices", dump) \
+F(301, "Moved Permanently", dump) \
+F(303, "See Other", dump) \
+F(304, "Not Modified", dump) \
+F(305, "Use Proxy", dump) \
+F(308, "Permanent Redirect", dump) \
+F(400, "Bad Request (bug?)", dump) \
+F(401, "Unauthorized", dump) \
+F(403, "Forbidden", dump) \
+F(404, "Not Found", dump) \
+F(405, "Method Not Allowed (bug?)", dump) \
+F(406, "Not Acceptable", dump) \
+F(408, "Request Time-out (bug?)", dump) \
+F(410, "Gone", dump) \
+F(411, "Length Required (bug?)", dump) \
+F(412, "Precondition Failed	(bug?)", dump) \
+F(413, "Request Entity Too Large (bug?)", dump) \
+F(414, "Request-URL Too Long (bug?)", dump) \
+F(415, "Unsupported Media Type (bug?)", dump) \
+F(420, "Policy Not Fulfilled (bug?)", dump) \
+F(421, "There are too many connections from your internet address (bug?)", dump) \
+F(422, "Unprocessable Entity (bug?)", dump) \
+F(423, "Locked", dump) \
+F(424, "Failed Dependency", dump) \
+F(426, "Upgrade Required (bug?)", dump) \
+F(428, "Precondition Required (bug?)", dump) \
+F(429, "Too Many Requests (bug?)", dump) \
+F(431, "Request Header Fields Too Large (bug?)" , dump)
+
+typedef void (*purplefeed_return_code_callback)(const int, const gchar*, const gchar*);
+
+GHashTable *return_codes = NULL;
+
+/*
+ TODO saved for later, don't need all those -Wunused-function warnings right now
+#define PRPLFEED_RETURN_CODE_PROTOTYPES(NAME, MESSAGE, FUNCTION) \
+            static void purplefeed_return_code_##NAME##_cb(const int id, const gchar* message, const gchar* url_text);
+
+#define PRPLFEED_RETURN_CODE_BODIES(NAME, MESSAGE, FUNCTION) \
+            static void purplefeed_return_code_##NAME##_cb(const int id, const gchar* message, const gchar* url_text) \
+            { \
+                purple_debug_info(PRPLFEED, "-> %i(%i) %s(%s) %s\n", id, NAME, message, MESSAGE, url_text); \
+            }
+
+PRPLFEED_RETURN_CODES(PRPLFEED_RETURN_CODE_PROTOTYPES)
+PRPLFEED_RETURN_CODES(PRPLFEED_RETURN_CODE_BODIES)
+*/
+
+static void purplefeed_return_code_dump_cb(const int id, const gchar* message, const gchar* url_text);
+static void purplefeed_return_code_dump_cb(const int id, const gchar* message, const gchar* url_text)
+{
+    purple_debug_info(PRPLFEED, "purplefeed_return_code_dump_cb: %i %s %s\n", id, message, url_text);
+}
+
+// TODO For now: Just dump everything. Later switch to ##NAME## or proper ##FUNCTION## functions
+#define PRPLFEED_RETURN_CODE_HASH_INSERTS(NAME, MESSAGE, FUNCTION)	{ \
+    g_hash_table_insert(return_codes, GINT_TO_POINTER(NAME), &purplefeed_return_code_##FUNCTION##_cb); \
+}
+
+
 static const char *prplfeed_list_icon(PurpleAccount *a, PurpleBuddy *b)
 {
 	return "feed";
@@ -86,6 +155,125 @@ static const char *prplfeed_list_emblems(PurpleBuddy *b)
 		return "secure";
 	else
 		return NULL;
+}
+
+static void prplfeed_check_buddy_for_updates_cb(PurpleUtilFetchUrlData *url_data, gpointer user_data, const gchar *url_text, gsize len, const gchar *error_message)
+{
+    const char *ret;
+    void (*return_code_cb)(const int, const gchar*, const gchar*);
+    const PurpleBuddy *buddy = (PurpleBuddy*)user_data;
+    int http_version = -1;
+    int return_code = 0;
+
+    purple_debug_info(PRPLFEED, "Err: %s, URL: %s, URL_text: %s\n", error_message, buddy->name, url_text);
+
+    /* This is probably prone to some format error or something */
+    sscanf(url_text, "HTTP/1.%1i %3i", &http_version, &return_code);
+
+    /* Lookup and call the proper callback for our return code */
+    return_code_cb = g_hash_table_lookup(return_codes, GINT_TO_POINTER(return_code));
+    if(!return_code_cb)
+        purple_debug_error(PRPLFEED, "Couldn't find a return_code_cb for %i(%i Elements in table), using HTTP/1.%i\n",
+                return_code, g_hash_table_size(return_codes), http_version);
+    else
+        (*return_code_cb)(return_code, "(TODO is the description actually necessary?)", url_text);
+
+    /* General date-relevant fields */
+    /* Note: This uses the server's timezone and not necessarily the local one */
+#define CHECK_AND_SAVE_HEADER(TEXT, VARNAME) { \
+    if((ret = purple_strcasestr(url_text, "\n"TEXT":")) != NULL) \
+    { \
+        char var[128]; \
+        memset(var, 0, sizeof(var)); \
+        sscanf(ret, "\n"TEXT": %127[^\r\n]", var); \
+        purple_debug_info(PRPLFEED, "-> %s %s(%s)\n", TEXT, var, ret); \
+        \
+        purple_blist_node_set_string(PURPLE_BLIST_NODE(buddy), VARNAME, var); \
+    } \
+}
+    CHECK_AND_SAVE_HEADER("Cache-Control", "cachecontrol")
+	CHECK_AND_SAVE_HEADER("Last Modified", "lastmodified")
+    CHECK_AND_SAVE_HEADER("Expires", "expires")
+    CHECK_AND_SAVE_HEADER("Date", "lastchecked")
+#undef CHECK_HEADER
+
+    /*
+    TODO based on return code and parsed headers decide what to do/save (if obey_cache_headers==true)
+         e.g. 304 -> all fine, 200 -> proceed with update, 401 -> inform user, etc.
+    Relevant headers:
+    Cache-Control
+    Last-Modified (e.g. http://web.jabber.ccc.de/?feed=rss2 always returns 200 OK, but Last-Modified tells the truth)
+    Expires
+    */
+}
+
+static void prplfeed_check_buddy_for_updates(const PurpleBuddy* buddy)
+{
+    // TODO SSL testing
+    // TODO Proxy testing
+    // TODO Auth testing
+
+    char *host;
+    char *path;
+    char *request;
+    char *username;
+    char *password;
+    char *auth;
+    char *auth_base64 = NULL;
+    const char *locale;
+    const char *last_check;
+
+    /* Get the last time we checked this buddy or default to now */
+    if((last_check = purple_blist_node_get_string(PURPLE_BLIST_NODE(buddy), "lastcheck")) == NULL)
+    {
+        const time_t current_time = time(NULL);
+
+        /* Days and months have to be in English*/
+        locale = setlocale(LC_TIME, NULL);
+        setlocale(LC_TIME, "en_US.utf8");
+
+        /* Format according to RFC rules */
+        last_check = purple_utf8_strftime("%a, %d %b %Y %H:%M:%S %Z", gmtime(&current_time));
+
+        /* Switch back to former locale */
+        setlocale(LC_TIME, locale);
+    }
+
+    purple_url_parse(buddy->name, &host, NULL, &path, &username, &password);
+
+    /* Basic authorization */
+    if(strlen(username) > 0)
+    {
+        auth = g_strdup_printf("%s:%s", username, password);
+        auth_base64 = purple_base64_encode((unsigned char*)&auth, strlen(auth));
+        // Authorization: Basic %s\r\n
+    }
+
+    /* Our crude and short header request */
+    request = g_strdup_printf("HEAD /%s HTTP/1.1\r\n"
+				 "User-Agent: " PRPLFEED "\r\n"
+				 "Host: %s\r\n"
+                 "If-Modified-Since: %s\r\n"
+                 "Accept-Encoding: deflate\r\n\r\n",
+				  path, host, last_check);
+
+    purple_debug_info(PRPLFEED, "request: %s\n", request);
+
+    /* Actually send the request */
+    purple_util_fetch_url_request(buddy->name, TRUE, NULL, TRUE, request, TRUE, prplfeed_check_buddy_for_updates_cb, (gpointer)buddy);
+
+    /* Authorization again */
+    if(strlen(username) > 0)
+    {
+        g_free(auth);
+        g_free(auth_base64);
+    }
+
+    g_free(host);
+    g_free(path);
+    g_free(request);
+    g_free(username);
+    g_free(password);
 }
 
 static gboolean prplfeed_request_feed_from_buddy(PurpleBuddy *b, mrss_t **mrss, mrss_options_t *options);
@@ -110,6 +298,8 @@ static gboolean prplfeed_feed_check(gpointer userdata)
 
 	if(data)
 		mrss_free(data);
+
+    prplfeed_check_buddy_for_updates(buddy);
 
 	return TRUE;
 }
@@ -162,20 +352,35 @@ static void prplfeed_check_buddy(PurpleConnection *gc, PurpleBuddy *buddy, gpoin
 static void prplfeed_login(PurpleAccount *acct)
 {
 	GSList *buddies;
+    guint buddies_count;
+    guint n;
 	PurpleConnection *gc = purple_account_get_connection(acct);
 
 	purple_debug_info(PRPLFEED, "logging in %s\n", acct->username);
 
-	purple_connection_update_progress(gc, _("Loading"), 0, 2);
+    buddies = purple_find_buddies(acct, NULL);
+    buddies_count = g_slist_length(buddies);
 
-	for (buddies = purple_find_buddies(acct, NULL); buddies; buddies = g_slist_delete_link(buddies, buddies))
+	purple_connection_update_progress(gc, _("Loading buddies"), 0, buddies_count + 3);
+
+	for (n = 1; buddies; buddies = g_slist_delete_link(buddies, buddies), n++)
 	{
 		PurpleBuddy *buddy = buddies->data;
 
 		prplfeed_check_buddy(gc, buddy, NULL);
+
+        purple_connection_update_progress(gc, buddy->alias ? buddy->alias : buddy->name, n, buddies_count + 3);
+
+        purple_debug_info(PRPLFEED, "checked %i (%s)\n", n, buddy->alias ? buddy->alias : buddy->name);
 	}
 
-	purple_connection_update_progress(gc, _("Done loading"), 1, 2);
+	purple_connection_update_progress(gc, _("Finished loading buddies"), n, buddies_count + 3);
+
+    /* Fill our 'return code' -> 'callback function' table */
+    return_codes = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
+    PRPLFEED_RETURN_CODES(PRPLFEED_RETURN_CODE_HASH_INSERTS)
+
+    purple_connection_update_progress(gc, _("Initialized return codes table"), n + 1, buddies_count + 3);
 
 	purple_debug_info(PRPLFEED, "done logging in %s\n", acct->username);
 
@@ -195,6 +400,10 @@ static void prplfeed_close(PurpleConnection *gc)
 
 		purple_blist_node_remove_setting(PURPLE_BLIST_NODE(buddy), "timerid");
 	}
+
+    g_hash_table_destroy(return_codes);
+
+    purple_debug_info(PRPLFEED, "done closing %s\n", gc->account->username);
 }
 
 static void prplfeed_add_buddy(PurpleConnection *gc, PurpleBuddy *buddy, PurpleGroup *group)
@@ -218,7 +427,8 @@ static gboolean prplfeed_request_feed_from_buddy(PurpleBuddy *b, mrss_t **mrss, 
 	ret = mrss_parse_url_with_options_and_error(b->name, mrss, options, &curlcode);
 	if (ret)
 	{
-		purple_debug_error(PRPLFEED, "%s in feed %s", ret == MRSS_ERR_DOWNLOAD ? mrss_curl_strerror(curlcode) : mrss_strerror(ret), b->name);
+		purple_debug_error(PRPLFEED, "Error in feed %s (ret: %i, curl: %s, mrss: %s)\n", b->name, ret, mrss_curl_strerror(curlcode), mrss_strerror(ret));
+
 		return FALSE;
 	}
 	
